@@ -1,1 +1,5 @@
-# biostat626-Midterm1
+## Introduction
+## Objectives
+## Programming language and Necessary Packages
+## Methods
+## Other resources
