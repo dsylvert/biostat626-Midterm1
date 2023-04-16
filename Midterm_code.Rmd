@@ -1,0 +1,161 @@
+---
+title: 'Midterm: Biostat 626'
+author: "Dhajanae Sylvertooth"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Loading needed data and libraries
+```{r, message=FALSE}
+library(dplyr)
+library(corrr) ## for correlation analysis
+library(ggcorrplot) 
+library(FactoMineR) ## used to perform PCA
+library(utils) ## for reading in the data
+library(nnet) ## multinomial logistic regression
+library(glmnet)
+library(ggplot2)
+
+### set working directory here (data must be downloaded in said directory)
+setwd("/Users/dj/Documents/Classes/Biostat 626/Midterm/")
+
+training_data <- read.table("training_data.txt", header = TRUE)
+testing_data <- read.table("test_data.txt", header = TRUE)
+
+### Data for task 1
+training_data.t1 <- training_data %>%
+  mutate(status = ifelse(activity %in% 4:12, 0, 1))
+
+any(is.na(training_data.t1$status)) ## making sure status column coded correctly
+
+
+### Data for task 2
+training_data.t2 <- training_data %>%
+  mutate(status = ifelse(activity %in% 1:6, activity, 7))
+
+any(is.na(training_data.t2$status)) ## making sure status column coded correctly
+```
+
+### Task 1
+
+<b>Performing PCA</b>
+```{r}
+### getting correlation matrix
+corr_matrix <- training_data %>% 
+  dplyr::select(-c(1,2)) %>%
+  cor()
+
+### getting eigenvalues and eigenvectors
+pca.data <- princomp(corr_matrix)
+summary.data <- summary(pca.data)
+pov <- summary.data$sdev^2/sum(summary.data$sdev^2) ## proportion of variance
+
+pov[1:5]
+```
+
+<b>Regression Analysis</b>
+
+Transform the data using the first three principal components
+```{r}
+### can make change here to which principal components to choose
+transformed.t1.training <- as.matrix(dplyr::select(training_data.t1,-c(1,2,564))) %*% as.matrix(summary.data$loadings[,1:7]) %>%
+  as.data.frame() %>%
+  mutate(subject = training_data.t1$subject, activity = training_data.t1$activity, status = training_data.t1$status, .before = Comp.1)
+```
+
+Perform logistic regression
+```{r}
+task1.fit <- glm(data = transformed.t1.training, status ~ Comp.1 + Comp.2 + Comp.3 + Comp.4 + Comp.5 + Comp.6 + Comp.7, family = binomial(link = "logit"))
+
+### get transformed test data
+transformed.t1.testing <- as.matrix(dplyr::select(testing_data,-c(1))) %*% as.matrix(summary.data$loadings[,1:7]) %>%
+  as.data.frame() %>%
+  mutate(subject = testing_data$subject, .before = Comp.1)
+```
+
+
+Make predictions from model and checking preformance with the the training data set responses.
+```{r}
+task1.probs <- predict(task1.fit, transformed.t1.testing, type = "response")
+task1.predict <- ifelse(task1.probs > 0.5, 1, 0)
+
+check.probs <- predict(task1.fit, transformed.t1.training, type = "response")
+check.predict <- ifelse(check.probs > 0.5, 1, 0)
+mean(check.predict == transformed.t1.training$status)
+```
+
+Write .txt file
+```{r}
+# Writing predicted data
+write.table(task1.predict, file = "binary_74892.txt", sep = "\t",
+            row.names = FALSE, col.names = FALSE)
+```
+
+Summarizing performance with the training
+```{r}
+eval.tbl <- data.frame(check.predict) %>%
+  mutate(`00` = ifelse(check.predict == 0 & check.predict == transformed.t1.training$status, TRUE, FALSE), 
+         `11` = ifelse(check.predict == 1 & check.predict == transformed.t1.training$status, TRUE, FALSE),
+         `01` = ifelse(check.predict == 0 & check.predict != transformed.t1.training$status, TRUE, FALSE),
+         `10` = ifelse(check.predict == 1 & check.predict != transformed.t1.training$status, TRUE, FALSE))
+
+colSums(eval.tbl[,2:5])/nrow(training_data)
+```
+
+
+### Task 2
+<b>Regression Analysis</b>
+
+```{r}
+### can make change here to which principal components to choose
+transformed.t1.training <- as.matrix(dplyr::select(training_data.t1,-c(1,2,564))) %*% as.matrix(summary.data$loadings[,1:11]) %>%
+  as.data.frame() %>%
+  mutate(subject = training_data.t1$subject, activity = training_data.t1$activity, status = training_data.t1$status, .before = Comp.1)
+
+### get transformed test data
+transformed.t1.testing <- as.matrix(dplyr::select(testing_data,-c(1))) %*% as.matrix(summary.data$loadings[,1:11]) %>%
+  as.data.frame() %>%
+  mutate(subject = testing_data$subject, .before = Comp.1)
+
+### training data with multi-class response
+transformed.t2.training <- transformed.t1.training %>%
+  mutate(subject = training_data.t2$subject, activity = training_data.t2$activity, status = training_data.t2$status, .before = Comp.1)
+  
+
+task2.fit <- multinom(data = transformed.t2.training, status ~ Comp.1 + Comp.2 + Comp.3 + Comp.4 + Comp.5 + Comp.6 + Comp.7 + Comp.8 + Comp.9 + Comp.10 + Comp.11 )
+```
+
+Make predictions from model
+```{r}
+## seems better if I directlty have it predict type = class
+task2.predict <- predict(task2.fit, transformed.t1.testing, type = "class")
+
+check.predict <- predict(task2.fit, transformed.t2.training, type = "class")
+```
+
+Write .txt file
+```{r}
+# Writing predicted data
+write.table(as.numeric(task2.predict), file = "multiclass_74894.txt", sep = "\t",
+            row.names = FALSE, col.names = FALSE)
+```
+
+
+Creating figures displaying performance
+```{r}
+eval.tbl2 <- data.frame(check.predict,
+                      transformed.t2.training$status, 
+                      matches = (check.predict == transformed.t2.training$status)) 
+
+ggplot(eval.tbl2, aes(x = factor(transformed.t2.training.status), y=(..count..)/sum(..count..), fill = matches)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = scales::percent, breaks = seq(0,16,by=0.015)) + 
+  labs(title = "Correct/ Incorrect Predictions: Final Approach",
+       y = "percentage(%)",
+       x = "observed response",
+       fill = "predicted response correct?") 
+  
+```
