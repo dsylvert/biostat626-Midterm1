@@ -9,7 +9,11 @@ An introduction to the data used can be found within the READ.md file here: [htt
 
 ## Programming language and Necessary Packages
 R/Rstudio was used to perform all methods. There are multiple packages required to run `Midterm_code.Rmd` to reproduce results. The following are the require packages:
-- **dplyr**: 
+- **dplyr**: for easy manipulation of data (often use to access `select()`, `mutate()`)
+- **stat**: used to access the `cor()` function
+- **FactoMineR**: used to perform PCA without manual coding (used to access `princomp()`)
+- **utils**: used to read in the data (used to access `read.table()`)
+- **nnet**: used to perform multinomial regression
 
 ## Methods
 ## Other resources
